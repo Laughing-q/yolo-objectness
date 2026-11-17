@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 
 from ultralytics import YOLO
 
@@ -37,9 +38,11 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     """Launch one training run of the selected arm with the benchmark protocol."""
     args = parse_args()
-    name = f"{args.data}-{args.arm}"
+    data = DATASETS.get(args.data, args.data)
+    data_key = Path(data).parent.name if data.endswith((".yaml", ".yml")) else args.data
+    name = f"{data_key}-{args.arm}"
     overrides = dict(
-        data=DATASETS.get(args.data, args.data),
+        data=data,
         epochs=args.epochs,
         patience=100,
         imgsz=640,
