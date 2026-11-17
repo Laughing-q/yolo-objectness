@@ -109,7 +109,7 @@ def write_report(dataset: str, results: dict[str, dict], out_dir: Path) -> None:
     for arm, r in results.items():
         tp_conf = r["conf"][r["tp50"]]
         mean_c = float(tp_conf.mean()) if tp_conf.size else 0.0
-        ax.hist(tp_conf, bins=bins, alpha=0.5, label=f"{arm} (mean {mean_c:.3f})", density=True)
+        ax.hist(tp_conf, bins=bins, alpha=0.5, label=f"{arm} (mean {mean_c:.3f})", density=bool(tp_conf.size))
     ax.set(xlabel="TP confidence (IoU 0.5)", ylabel="density", title=f"True-positive confidence — {dataset}")
     ax.legend()
     fig.tight_layout()
