@@ -11,7 +11,7 @@ import numpy as np
 
 from ultralytics import YOLO
 from ultralytics.models.yolo.detect import DetectionValidator
-from ultralytics.utils import yaml_load
+from ultralytics.utils import YAML
 
 
 class StatsValidator(DetectionValidator):
@@ -38,7 +38,7 @@ def collect(run_dir: Path, out_dir: Path) -> dict:
         (dict): Collected statistics including per-class AP, TP confidences and the confusion matrix.
     """
     model = YOLO(run_dir / "weights" / "best.pt")
-    data = yaml_load(run_dir / "args.yaml")["data"]
+    data = YAML.load(run_dir / "args.yaml")["data"]
     model.val(
         validator=StatsValidator, data=data, imgsz=640, batch=16, plots=True, save_json=True, verbose=True,
         project=out_dir, name="val",
@@ -137,7 +137,7 @@ def main() -> None:
         out_dir = Path(args.out) / f"{arm}-val"
         out_dir.mkdir(parents=True, exist_ok=True)
         results[arm] = collect(Path(path), out_dir)
-        run_name = run_name or yaml_load(Path(path) / "args.yaml")["name"]
+        run_name = run_name or YAML.load(Path(path) / "args.yaml")["name"]
     dataset = run_name.rsplit("-", 1)[0]  # run names follow "<dataset>-<arm>"
     out_dir = Path(args.out)
     write_report(dataset, results, out_dir)
