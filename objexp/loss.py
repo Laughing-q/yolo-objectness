@@ -90,6 +90,7 @@ class ObjectnessLoss(v8DetectionLoss):
         loss[0], loss[2] = self.bbox_loss(
             pred_distri,
             pred_bboxes,
+            anchor_points,
             target_bboxes / stride_tensor,
             target_scores,
             target_scores_sum,

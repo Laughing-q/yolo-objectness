@@ -15,7 +15,7 @@ from ultralytics.utils import yaml_load
 
 
 class StatsValidator(DetectionValidator):
-    """Detection validator that keeps the raw per-prediction match statistics for offline analysis."""
+    """Detection validator that keeps the raw per-prediction match statistics on its metrics object."""
 
     def get_stats(self) -> dict:
         """Snapshot concatenated raw stats before the metrics pipeline clears them.
@@ -23,7 +23,7 @@ class StatsValidator(DetectionValidator):
         Returns:
             (dict): Metrics results dict from the standard pipeline.
         """
-        self.raw_stats = {k: np.concatenate(v, 0) for k, v in self.metrics.stats.items() if v}
+        self.metrics.raw_stats = {k: np.concatenate(v, 0) for k, v in self.metrics.stats.items() if v}
         return super().get_stats()
 
 
@@ -39,11 +39,14 @@ def collect(run_dir: Path, out_dir: Path) -> dict:
     """
     model = YOLO(run_dir / "weights" / "best.pt")
     data = yaml_load(run_dir / "args.yaml")["data"]
-    model.val(data=data, imgsz=640, batch=16, plots=True, save_json=True, verbose=True, project=out_dir, name="val")
-    v, m = model.validator, model.metrics
-    raw = v.raw_stats
+    model.val(
+        validator=StatsValidator, data=data, imgsz=640, batch=16, plots=True, save_json=True, verbose=True,
+        project=out_dir, name="val",
+    )
+    m = model.metrics
+    raw = m.raw_stats
     tp50 = raw["tp"][:, 0]  # IoU 0.5 correct-class matches, one entry per prediction
-    names = [v.names[i] for i in m.ap_class_index]
+    names = [model.names[int(i)] for i in m.ap_class_index]
     return {
         "names": names,
         "map50_95": m.mean_results()[3],
@@ -55,7 +58,7 @@ def collect(run_dir: Path, out_dir: Path) -> dict:
         "tp50": tp50,
         "gt_count": len(raw["target_cls"]),
         "recall_at": {t: float((tp50 & (raw["conf"] >= t)).sum() / max(len(raw["target_cls"]), 1)) for t in (0.25, 0.5)},
-        "confusion": m.confusion_matrix.matrix.copy(),
+        "confusion": m.confusion_matrix.matrix.copy(),  # rows = predicted, cols = true
     }
 
 
@@ -72,9 +75,11 @@ def write_report(dataset: str, results: dict[str, dict], out_dir: Path) -> None:
     lines.append("|---|---|---|---|---|---|---|---|---|")
     for arm, r in results.items():
         tp_conf = r["conf"][r["tp50"]]
+        mean_c = float(tp_conf.mean()) if tp_conf.size else 0.0
+        median_c = float(np.median(tp_conf)) if tp_conf.size else 0.0
         lines.append(
             f"| {arm} | {r['map50_95']:.4f} | {r['map50']:.4f} | {r['precision']:.4f} | {r['recall']:.4f} | "
-            f"{tp_conf.mean():.4f} | {np.median(tp_conf):.4f} | {r['recall_at'][0.25]:.4f} | {r['recall_at'][0.5]:.4f} |"
+            f"{mean_c:.4f} | {median_c:.4f} | {r['recall_at'][0.25]:.4f} | {r['recall_at'][0.5]:.4f} |"
         )
 
     names = next(iter(results.values()))["names"]
@@ -84,13 +89,14 @@ def write_report(dataset: str, results: dict[str, dict], out_dir: Path) -> None:
 
     for arm, r in results.items():
         cm = r["confusion"][:-1, :-1]  # drop background row/col
-        pairs = [(cm[i, j], names[i], names[j]) for i in range(len(names)) for j in range(len(names)) if i != j]
+        # matrix rows are predicted and columns are true, so cm[pred, true] counts gt→pred confusions
+        pairs = [(cm[j, i], names[i], names[j]) for i in range(len(names)) for j in range(len(names)) if i != j]
         pairs.sort(reverse=True)
         lines += ["", f"## Inter-class confusion — {arm} (top pairs, gt → pred)", ""]
         lines += [f"- {a} → {b}: {int(n)}" for n, a, b in pairs[:5] if n > 0]
 
     lines += ["", "## Files", "", "- `tp_conf_hist.png` — TP confidence histograms at IoU 0.5"]
-    lines += [f"- `{arm}-val/` — validation artifacts (confusion matrices, predictions.json)" for arm in results]
+    lines += [f"- `{arm}-val/val/` — validation artifacts (confusion matrices, predictions.json)" for arm in results]
     (out_dir / "report.md").write_text("\n".join(lines) + "\n")
 
     import matplotlib

@@ -31,7 +31,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model", default="yolo26n.pt", help="pretrained weights or model YAML")
     parser.add_argument("--epochs", type=int, default=100, help="training epochs (benchmark protocol: 100)")
     parser.add_argument("--batch", type=int, default=16, help="batch size (benchmark protocol: 16)")
-    parser.add_argument("--project", default="runs/objectness", help="save directory parent")
+    parser.add_argument("--project", default="objectness", help="save directory parent under runs/detect")
     return parser.parse_args()
 
 
@@ -39,7 +39,7 @@ def main() -> None:
     """Launch one training run of the selected arm with the benchmark protocol."""
     args = parse_args()
     data = DATASETS.get(args.data, args.data)
-    data_key = Path(data).parent.name if data.endswith((".yaml", ".yml")) else args.data
+    data_key = (Path(data).parent.name or Path(data).stem) if data.endswith((".yaml", ".yml")) else args.data
     name = f"{data_key}-{args.arm}"
     overrides = dict(
         data=data,

@@ -31,6 +31,8 @@ class ObjDetectModel(DetectionModel):
             ch=[b[0].conv.in_channels for b in m.cv2],
         )
         head.stride = m.stride
+        head.f, head.i, head.type = m.f, m.i, m.type  # parse_model metadata read by _predict_once
+        head.np = sum(x.numel() for x in head.parameters())
         head.bias_init()
         initialize_weights(head)
         self.model[-1] = head
