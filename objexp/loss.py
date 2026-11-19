@@ -84,7 +84,8 @@ class ObjectnessLoss(v8DetectionLoss):
         loss[1] = bce_loss.sum() / target_scores_sum  # BCE
 
         # Obj loss over all anchors (P(object))
-        loss[3] = self.bce(pred_obj, fg_mask.unsqueeze(-1).to(dtype)).sum() / target_scores_sum  # BCE
+        # loss[3] = self.bce(pred_obj, fg_mask.unsqueeze(-1).to(dtype)).sum() / target_scores_sum  # BCE
+        loss[3] = self.bce(pred_obj, fg_mask.unsqueeze(-1).to(dtype)).mean()
 
         # Bbox loss: zero on an empty foreground, and pred_distri stays in the graph either way
         loss[0], loss[2] = self.bbox_loss(
