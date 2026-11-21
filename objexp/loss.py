@@ -84,7 +84,7 @@ class ObjectnessLoss(v8DetectionLoss):
         n_gt = gt_labels.shape[1]
         if n_gt:
             target_labels = gt_labels.squeeze(-1).gather(1, target_gt_idx.clamp(0, n_gt - 1).long())
-            target_onehot.scatter_(-1, target_labels.unsqueeze(-1), 1.0)
+            target_onehot.scatter_(-1, target_labels.unsqueeze(-1).long(), 1.0)
 
         # Cls loss on positive anchors only (P(class | object)), optional class weighting
         bce_loss = self.bce(pred_scores, target_onehot) * fg_mask.unsqueeze(-1)
