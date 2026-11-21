@@ -7,17 +7,19 @@ from typing import Any
 import torch
 
 from ultralytics.utils.loss import v8DetectionLoss
+from ultralytics.utils.metrics import bbox_iou
 from ultralytics.utils.tal import make_anchors
 
 
 class ObjectnessLoss(v8DetectionLoss):
-    """Detection loss with a YOLOv5-style factorized objectness/classification training signal.
+    """Detection loss with YOLOv5-style factorized objectness/classification targets.
 
     Differences from :class:`v8DetectionLoss`:
     - The TaskAlignedAssigner ranks candidates with the combined score σ(cls) · σ(obj), matching inference confidence.
-    - The classification BCE is restricted to positive anchors (P(class | object)); background rejection moves to the
-      objectness branch.
-    - An objectness BCE over all anchors supervises P(object) against the foreground mask.
+    - The classification BCE is restricted to positive anchors with one-hot targets (P(class | object)); background
+      rejection moves to the objectness branch.
+    - An objectness BCE over all anchors regresses the CIoU of matched boxes at positive anchors, matching YOLOv5's
+      ``tobj = iou`` target (``utils/loss.py``).
     """
 
     def __init__(self, model: torch.nn.Module, tal_topk: int = 10, tal_topk2: int | None = None):
@@ -77,15 +79,29 @@ class ObjectnessLoss(v8DetectionLoss):
 
         target_scores_sum = target_scores.sum().clamp_(min=1)  # on the device: no host sync
 
+        # YOLOv5-style targets: cls ← one-hot at positives, obj ← CIoU of matched boxes at positives
+        target_onehot = torch.zeros_like(pred_scores)
+        n_gt = gt_labels.shape[1]
+        if n_gt:
+            target_labels = gt_labels.squeeze(-1).gather(1, target_gt_idx.clamp(0, n_gt - 1).long())
+            target_onehot.scatter_(-1, target_labels.unsqueeze(-1), 1.0)
+
         # Cls loss on positive anchors only (P(class | object)), optional class weighting
-        bce_loss = self.bce(pred_scores, target_scores.to(dtype)) * fg_mask.unsqueeze(-1)
+        bce_loss = self.bce(pred_scores, target_onehot) * fg_mask.unsqueeze(-1)
         if self.class_weights is not None:
             bce_loss *= self.class_weights
         loss[1] = bce_loss.sum() / target_scores_sum  # BCE
 
-        # Obj loss over all anchors (P(object))
-        # loss[3] = self.bce(pred_obj, fg_mask.unsqueeze(-1).to(dtype)).sum() / target_scores_sum  # BCE
-        loss[3] = self.bce(pred_obj, fg_mask.unsqueeze(-1).to(dtype)).mean()
+        # Obj loss over all anchors (P(object)), target = CIoU of matched boxes at positives
+        obj_target = torch.zeros_like(pred_obj)
+        obj_target[fg_mask] = (
+            bbox_iou(pred_bboxes[fg_mask], (target_bboxes / stride_tensor)[fg_mask], xywh=False, CIoU=True)
+            .reshape(-1, 1)
+            .detach()
+            .clamp(0)
+            .to(dtype)
+        )
+        loss[3] = self.bce(pred_obj, obj_target).sum() / target_scores_sum  # BCE
 
         # Bbox loss: zero on an empty foreground, and pred_distri stays in the graph either way
         loss[0], loss[2] = self.bbox_loss(
