@@ -43,6 +43,24 @@ model.train(trainer=ObjectnessTrainer, data="data.yaml", epochs=100)  # objectne
 - `ObjDetectModel.init_criterion()` returns `E2ELoss(self, ObjectnessLoss)` for dual-head models (yolo26) or `ObjectnessLoss(self)` otherwise.
 - Loading a trained checkpoint requires `objexp` on the path: `YOLO("runs/.../best.pt")` works from the repo root.
 
+**Top-k class scores per predicted object** — `TopkPredictor` returns the k highest class scores of each detection (sorted descending; column 0 mirrors the final `boxes.cls`/`boxes.conf`), with adjustable `k`:
+
+```python
+from functools import partial
+from objexp import TopkPredictor, predict_topk
+
+r = predict_topk(model, "img.jpg", k=5)[0]   # convenience wrapper
+r.topk_classes  # (num_boxes, k) int tensor — class ids, best first
+r.topk_scores   # (num_boxes, k) float tensor — same units as boxes.conf
+
+# or pick the predictor directly
+results = model.predict("img.jpg", predictor=TopkPredictor)                  # default k=5
+results = model.predict("img.jpg", predictor=partial(TopkPredictor, topk=3))  # k=3
+```
+
+- Works with stock and objectness models on the external-NMS path (`nms=None`/`True`); for objectness models scores are `σ(cls)·σ(obj)`, matching `boxes.conf`.
+- End-to-end NMS-free outputs (`nms=False`) are already reduced to top-1 before post-processing — falls back to stock behavior with a warning.
+
 ## Design
 
 - `ObjDetect(Detect)` — `cv4`/`one2one_cv4` (1-channel objectness convs parallel to the `cv3` cls branch) + `"obj"` key in the head dict; inference emits `conf = σ(cls) · σ(obj)` in the stock `(B, 4+nc, N)` layout, so NMS/validator/predictor are untouched.
@@ -128,7 +146,8 @@ objexp/
 ├── head.py      # ObjDetect(Detect): cv4/one2one_cv4 objectness convs, conf = σ(cls)·σ(obj)
 ├── loss.py      # ObjectnessLoss(v8DetectionLoss): v5 targets (obj ← CIoU, cls ← one-hot)
 ├── model.py     # ObjDetectModel(DetectionModel): head swap + init_criterion
-└── trainer.py   # ObjectnessTrainer(DetectionTrainer): get_model override
+├── trainer.py   # ObjectnessTrainer(DetectionTrainer): get_model override
+└── topk.py      # TopkPredictor: top-k class scores per predicted object
 train.py         # --arm baseline|objectness, benchmark protocol
 analyze.py       # multi-arm val comparison: report.md, TP-conf histograms, confusion
 ```
