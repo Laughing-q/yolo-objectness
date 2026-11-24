@@ -2,7 +2,7 @@
 
 📌 Reintroducing the YOLOv5 **objectness branch** to Ultralytics YOLO (v8 / YOLO11 / YOLO26) as an external package — with YOLOv5's target semantics it reproduces the field claim: **higher confidence (+0.06–0.10 mean TP conf) on similar-looking classes at equal-or-better mAP**, e.g. semiconductor-style defect categories.
 
-Clients reported that YOLO outputs low confidence when categories have similar appearance, and that re-adding the objectness branch removed in v5→v8 helps. This repo is the controlled experiment: the branch re-implemented **without modifying `ultralytics/`**, A/B-tested on 2 hard datasets from the [Ultralytics Benchmark](https://github.com/ultralytics/ultralytics) (37 datasets) under the benchmark protocol.
+YOLO tends to output low confidence when categories have similar appearance, and re-adding the objectness branch removed in v5→v8 is reported to help. This repo is the controlled experiment: the branch re-implemented **without modifying `ultralytics/`**, A/B-tested on 2 hard datasets from the [Ultralytics Benchmark](https://github.com/ultralytics/ultralytics) (37 datasets) under the benchmark protocol.
 
 ## How to use this repo
 
@@ -92,7 +92,7 @@ flowchart TB
 ## Experiment results
 
 - Protocol (Ultralytics Benchmark): yolo26n, 100 epochs, seed 0, batch 16, imgsz 640, train ≤ 1000 images (`fraction=[1000, 1.0, 0.0]`), full val, `cls_remap=True`; all other hyps = `cfg/default.yaml`.
-- Datasets: **DSPCBSD** (9 near-identical PCB defect classes — closest to the semiconductor client scenario) and **TN5000** (benign/malignant thyroid ultrasound — low contrast, low inter-class discrimination).
+- Datasets: **DSPCBSD** (9 near-identical PCB defect classes — closest to the semiconductor defect scenario) and **TN5000** (benign/malignant thyroid ultrasound — low contrast, low inter-class discrimination).
 - `recall@thr` = recall after discarding detections with `conf < thr` (matched = IoU ≥ 0.5 + correct class).
 
 ### Final answer — v5-targets objectness vs stock baseline
@@ -104,38 +104,12 @@ flowchart TB
 | TN5000 pretrained | 0.510 → **0.514** | 0.666 → **0.762** | 0.814 → **0.820** |
 | TN5000 scratch | 0.478 → **0.487** | 0.647 → **0.703** | 0.788 → **0.832** |
 
-TP confidence histograms at IoU 0.5 (blue = baseline · orange = obj hard-fg targets · green = obj v5 targets):
+TP confidence histograms at IoU 0.5 (blue = baseline · orange = v5-style objectness):
 
 | | |
 |---|---|
 | ![dspcbsd pretrained](assets/tpconf-v5t-dspcbsd-pretrained.png) | ![dspcbsd scratch](assets/tpconf-v5t-dspcbsd-scratch.png) |
 | ![tn5000 pretrained](assets/tpconf-v5t-tn5000-pretrained.png) | ![tn5000 scratch](assets/tpconf-v5t-tn5000-scratch.png) |
-
-### Ablation history (why the target pairing is the key)
-
-**mAP50-95**
-
-| cell | baseline | obj hard-fg/soft-cls | obj + mean-norm loss | obj v5 targets |
-|---|---|---|---|---|
-| DSPCBSD pretrained | 0.396 | 0.380 | 0.380 | **0.397** |
-| DSPCBSD scratch | 0.282 | 0.268 | 0.261 | **0.308** |
-| TN5000 pretrained | 0.510 | **0.517** | 0.478 | 0.514 |
-| TN5000 scratch | 0.478 | **0.489** | 0.422 | 0.487 |
-
-**mean TP conf**
-
-| cell | baseline | obj hard-fg/soft-cls | obj + mean-norm loss | obj v5 targets |
-|---|---|---|---|---|
-| DSPCBSD pretrained | 0.561 | 0.550 | 0.503 | **0.636** |
-| DSPCBSD scratch | 0.408 | 0.372 | 0.354 | **0.489** |
-| TN5000 pretrained | 0.666 | 0.697 | 0.670 | **0.762** |
-| TN5000 scratch | 0.647 | 0.616 | 0.562 | **0.703** |
-
-- The original pairing (obj ← hard fg_mask, cls ← TAL soft scores) **hurt** DSPCBSD and merely shifted TN5000's P/R trade — and it is not a pretrained/random-init artifact (same deficit from scratch).
-- Mean-normalizing the obj loss is equal-or-worse — the obj-loss scale is not the driver.
-- Switching only the targets to the YOLOv5 pairing (obj ← CIoU, cls ← one-hot) turns the branch beneficial in all 4 cells: mAP at/above baseline and confidence up +0.06–0.10, with fewer inter-class confusions on DSPCBSD.
-- 💡 Mechanism: CIoU targets give obj a graded localization-quality signal that stays informative after saturation; one-hot cls frees class discrimination from soft IoU-weighted targets. The inverted pairing trains obj on a trivial hard mask while pushing cls toward confounded soft scores.
-- Single seed (0) per cell — treat dataset-dependent direction as the finding; the seed sweep is the open follow-up.
 
 Full experiment record (training curves, prediction panels, per-class AP, confusion matrices): [ultralytics-private#219](https://github.com/ultralytics/ultralytics-private/issues/219).
 
