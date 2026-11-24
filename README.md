@@ -2,7 +2,7 @@
 
 📌 Reintroducing the YOLOv5 **objectness branch** to Ultralytics YOLO (v8 / YOLO11 / YOLO26) as an external package — with YOLOv5's target semantics it reproduces the field claim: **higher confidence (+0.06–0.10 mean TP conf) on similar-looking classes at equal-or-better mAP**, e.g. semiconductor-style defect categories.
 
-YOLO tends to output low confidence when categories have similar appearance, and re-adding the objectness branch removed in v5→v8 is reported to help. This repo is the controlled experiment: the branch re-implemented **without modifying `ultralytics/`**, A/B-tested on 2 hard datasets from the [Ultralytics Benchmark](https://github.com/ultralytics/ultralytics) (37 datasets) under the benchmark protocol.
+YOLO tends to output low confidence when categories have similar appearance, and re-adding the objectness branch removed in v5→v8 is reported to help. This repo is the controlled experiment: the branch re-implemented **without modifying `ultralytics/`**, A/B-tested on 2 hard datasets from the [Ultralytics Benchmark](https://docs.ultralytics.com/datasets/detect/ultralytics-benchmark) (37 datasets) under the benchmark protocol.
 
 ## How to use this repo
 
